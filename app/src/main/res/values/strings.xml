@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Lab 4</string>
+    <string name="price">RM</string>
+    <string name="title">Expense for...</string>
+    <string name="date">5/11/2024</string>
+    <string name="user_pwd">Password</string>
+    <string name="user_name">username</string>
+    <string name="btn_login">login</string>
+
+</resources>
