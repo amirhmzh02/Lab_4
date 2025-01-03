@@ -5,12 +5,12 @@ import android.app.DatePickerDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Bundle;
-import android.provider.CalendarContract;
 import android.provider.MediaStore;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.DatePicker;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
@@ -22,6 +22,7 @@ import com.google.android.material.navigation.NavigationView;
 import java.util.Calendar;
 
 import my.edu.utem.ftmk.lab4.databinding.ActivityexpenseBinding;
+import my.edu.utem.ftmk.lab4.sqlite.DatabaseExpense;
 
 public class ExpenseActivity extends AppCompatActivity {
 
@@ -29,6 +30,8 @@ public class ExpenseActivity extends AppCompatActivity {
     private DrawerLayout drawerLayout;
     private ActionBarDrawerToggle actionBarDrawerToggle;
     private NavigationView navigationView;
+    private DatabaseExpense databaseExpense;
+    private ExpenseAdapter expenseAdapter;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,44 +40,32 @@ public class ExpenseActivity extends AppCompatActivity {
         binding = ActivityexpenseBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
+        // Initialize the database object
+        databaseExpense = new DatabaseExpense(this);
+
+        // Set up the quantity spinner (15 items from 1 to 15)
         Integer[] numbers = new Integer[15];
-        for (int i = 0; i<15;i++){
+        for (int i = 0; i < 15; i++) {
             numbers[i] = i + 1;
         }
-
         ArrayAdapter<Integer> adapter = new ArrayAdapter<>(this,
-                android.R.layout.simple_spinner_item,numbers);
+                android.R.layout.simple_spinner_item, numbers);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         binding.spnQty.setAdapter(adapter);
 
+        // Set listeners for buttons
         binding.btnSave.setOnClickListener(this::fnSaveExp);
         binding.imgExp.setOnClickListener(this::fnTakePic);
 
+        // Date picker for expense date
         binding.edtExpDate.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                fnInvokeDatePricker();
-            }
-
-            DatePickerDialog pickerDialog;
-            private void fnInvokeDatePricker() {
-                final Calendar calendar = Calendar.getInstance();
-                int day = calendar.get(Calendar.DAY_OF_MONTH);
-                int month = calendar.get(Calendar.MONTH);
-                int year = calendar.get(Calendar.YEAR);
-
-                pickerDialog = new DatePickerDialog(ExpenseActivity.this, new
-                        DatePickerDialog.OnDateSetListener(){
-                    @Override
-                            public void onDateSet(DatePicker datePicker, int year,int monthofyear,int dayOfMonth)
-                    {
-                        binding.edtExpDate.setText(dayOfMonth+"/"+(monthofyear+1)+"/"+year);
-                    }
-                },year,month,day);
-                pickerDialog.show();
+                fnInvokeDatePicker();
             }
         });
 
+        // Drawer layout setup
         drawerLayout = binding.myDrawerLayout;
         actionBarDrawerToggle = new ActionBarDrawerToggle(this, drawerLayout, R.string.nav_open, R.string.nav_close);
         drawerLayout.addDrawerListener(actionBarDrawerToggle);
@@ -125,29 +116,59 @@ public class ExpenseActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    // Method to open the camera and take a picture
     private void fnTakePic(View view) {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        startActivityForResult(intent,0);
+        startActivityForResult(intent, 0);
     }
 
+    // Method to handle saving the expense
     private void fnSaveExp(View view) {
+        // Collect the data from the UI
+        String expName = binding.edtExpValue.getText().toString();
+        String expDate = binding.edtExpDate.getText().toString();
+        float expValue = Float.parseFloat(binding.txtTotalPrice.getText().toString());
         int qtyItem = (int) binding.spnQty.getSelectedItem();
-        binding.txtTotalPrice.getText();
 
-        binding.txtTotal.setText(""+qtyItem*Float.parseFloat(binding.txtTotalPrice.getText().toString()));
+        // Create a new Expense object
+        binding.txtTotalPrice.setText(""+qtyItem*Float.parseFloat(binding.edtExpValue.getText().toString()));
+        try {
+            int ResCode = databaseExpense.fnInsertExpense(expenseAdapter);
+            if (ResCode > 0)
+                Toast.makeText(this, "Expense saved successfully", Toast.LENGTH_SHORT).show();
+            else
+                Toast.makeText(this, "Failed to save expense", Toast.LENGTH_SHORT).show();
 
+        }catch (Exception e){
 
-
-
+        }
+        // Insert the expense into the database
     }
 
+    // Method to show the date picker
+    private void fnInvokeDatePicker() {
+        final Calendar calendar = Calendar.getInstance();
+        int day = calendar.get(Calendar.DAY_OF_MONTH);
+        int month = calendar.get(Calendar.MONTH);
+        int year = calendar.get(Calendar.YEAR);
+
+        DatePickerDialog pickerDialog = new DatePickerDialog(ExpenseActivity.this, new DatePickerDialog.OnDateSetListener() {
+            @Override
+            public void onDateSet(DatePicker datePicker, int year, int monthOfYear, int dayOfMonth) {
+                binding.edtExpDate.setText(dayOfMonth + "/" + (monthOfYear + 1) + "/" + year);
+            }
+        }, year, month, day);
+        pickerDialog.show();
+    }
+
+    // Handle the result of the image capture
     @Override
-    protected  void onActivityResult(int requestCode, int resultCode,Intent data){
-        super.onActivityResult(requestCode,requestCode,data);
-        Bitmap bitmap = (Bitmap) data.getExtras().get("data");
-        binding.imgExp.setImageBitmap(bitmap);
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (resultCode == RESULT_OK && data != null) {
+            Bitmap bitmap = (Bitmap) data.getExtras().get("data");
+            binding.imgExp.setImageBitmap(bitmap);
+        }
     }
-
-
-
 }
