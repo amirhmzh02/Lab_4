@@ -2,7 +2,9 @@ package my.edu.utem.ftmk.lab4;
 
 import android.annotation.SuppressLint;
 import android.app.DatePickerDialog;
+import android.content.ContentValues;
 import android.content.Intent;
+import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -16,13 +18,27 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.ActionBarDrawerToggle;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.navigation.NavigationView;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.Calendar;
+import java.util.List;
 
 import my.edu.utem.ftmk.lab4.databinding.ActivityexpenseBinding;
+import my.edu.utem.ftmk.lab4.sqlite.AppDatabase;
 import my.edu.utem.ftmk.lab4.sqlite.DatabaseExpense;
+import my.edu.utem.ftmk.lab4.sqlite.ExpenseDAO;
 
 public class ExpenseActivity extends AppCompatActivity {
 
@@ -31,7 +47,10 @@ public class ExpenseActivity extends AppCompatActivity {
     private ActionBarDrawerToggle actionBarDrawerToggle;
     private NavigationView navigationView;
     private DatabaseExpense databaseExpense;
+    private AppDatabase appDatabase;
+    private ExpenseDAO expensesDAO;
     private ExpenseAdapter expenseAdapter;
+    private RecyclerView recyclerView;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,8 +59,10 @@ public class ExpenseActivity extends AppCompatActivity {
         binding = ActivityexpenseBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // Initialize the database object
+        // Initialize the database objects
         databaseExpense = new DatabaseExpense(this);
+        appDatabase = AppDatabase.getDatabase(this);
+        expensesDAO = appDatabase.expensesDAO();
 
         // Set up the quantity spinner (15 items from 1 to 15)
         Integer[] numbers = new Integer[15];
@@ -53,17 +74,16 @@ public class ExpenseActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         binding.spnQty.setAdapter(adapter);
 
+        // Set up the RecyclerView to display expenses
+        recyclerView = binding.recyclerViewExpenses;
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+
         // Set listeners for buttons
         binding.btnSave.setOnClickListener(this::fnSaveExp);
         binding.imgExp.setOnClickListener(this::fnTakePic);
 
         // Date picker for expense date
-        binding.edtExpDate.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                fnInvokeDatePicker();
-            }
-        });
+        binding.edtExpDate.setOnClickListener(v -> fnInvokeDatePicker());
 
         // Drawer layout setup
         drawerLayout = binding.myDrawerLayout;
@@ -80,32 +100,28 @@ public class ExpenseActivity extends AppCompatActivity {
 
         // Set up the navigation view
         navigationView = binding.navigation;
-        navigationView.setNavigationItemSelectedListener(new NavigationView.OnNavigationItemSelectedListener() {
-            @SuppressLint("NonConstantResourceId")
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                Intent intent;
-                switch (item.getItemId()) {
-                    case R.id.nav_login_activity:
-                        intent = new Intent(getApplicationContext(), MainActivity.class);
-                        startActivity(intent);
-                        return true;
-
-                    case R.id.nav_register_activity:
-                        intent = new Intent(getApplicationContext(), MainActivity2.class);
-                        startActivity(intent);
-                        return true;
-
-                    case R.id.nav_expenses_activity:
-                        intent = new Intent(getApplicationContext(), ExpenseActivity.class);
-                        startActivity(intent);
-                        return true;
-
-                    default:
-                        return false;
-                }
+        navigationView.setNavigationItemSelectedListener(item -> {
+            Intent intent;
+            switch (item.getItemId()) {
+                case R.id.nav_login_activity:
+                    intent = new Intent(getApplicationContext(), MainActivity.class);
+                    startActivity(intent);
+                    return true;
+                case R.id.nav_register_activity:
+                    intent = new Intent(getApplicationContext(), MainActivity2.class);
+                    startActivity(intent);
+                    return true;
+                case R.id.nav_expenses_activity:
+                    intent = new Intent(getApplicationContext(), ExpenseActivity.class);
+                    startActivity(intent);
+                    return true;
+                default:
+                    return false;
             }
         });
+
+        // Load existing expenses into RecyclerView
+        loadExpenses();
     }
 
     @Override
@@ -124,25 +140,123 @@ public class ExpenseActivity extends AppCompatActivity {
 
     // Method to handle saving the expense
     private void fnSaveExp(View view) {
-        // Collect the data from the UI
-        String expName = binding.edtExpValue.getText().toString();
-        String expDate = binding.edtExpDate.getText().toString();
-        float expValue = Float.parseFloat(binding.txtTotalPrice.getText().toString());
-        int qtyItem = (int) binding.spnQty.getSelectedItem();
+        // Validate the inputs before processing
+        String expName = binding.edtName.getText().toString().trim();
+        String expDate = binding.edtExpDate.getText().toString().trim();
+        String totalPriceString = binding.txtTotalPrice.getText().toString().trim();
 
-        // Create a new Expense object
-        binding.txtTotalPrice.setText(""+qtyItem*Float.parseFloat(binding.edtExpValue.getText().toString()));
-        try {
-            int ResCode = databaseExpense.fnInsertExpense(expenseAdapter);
-            if (ResCode > 0)
-                Toast.makeText(this, "Expense saved successfully", Toast.LENGTH_SHORT).show();
-            else
-                Toast.makeText(this, "Failed to save expense", Toast.LENGTH_SHORT).show();
-
-        }catch (Exception e){
-
+        if (expName.isEmpty() || totalPriceString.isEmpty() || expDate.isEmpty()) {
+            Toast.makeText(this, "Please fill in all the fields", Toast.LENGTH_SHORT).show();
+            return;
         }
-        // Insert the expense into the database
+
+        try {
+            // Parse the expense value
+            float totalPrice = Float.parseFloat(totalPriceString);
+
+            // Get the selected quantity from the spinner
+            int qtyItem = Integer.parseInt(binding.spnQty.getSelectedItem().toString());
+
+            // Calculate the total price
+            float calculatedTotal = qtyItem * totalPrice;
+
+            // Create an Expense object
+            Expense expense = new Expense(expName, expDate, calculatedTotal, qtyItem);
+
+            // Insert the expense into the local SQLite database
+            new Thread(() -> {
+                expensesDAO.insertExpense(expense);
+                runOnUiThread(() -> Toast.makeText(this, "Expense saved locally", Toast.LENGTH_SHORT).show());
+            }).start();
+
+            // Send the expense data to the remote PHP server
+            new Thread(() -> sendExpenseToServer(expense)).start();
+
+            // Refresh the RecyclerView after inserting the expense
+            loadExpenses();
+
+            Toast.makeText(this, "Expense saved successfully!", Toast.LENGTH_SHORT).show();
+
+        } catch (NumberFormatException e) {
+            Toast.makeText(this, "Please enter valid numeric values for the expense", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "An unexpected error occurred: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+
+
+    private void sendExpenseToServer(Expense expense) {
+        try {
+            // Define the URL of your PHP script
+            String urlString = "http://192.168.0.17/Mobile/lab10/insert_expense.php"; // Change this to your actual server URL
+
+            // Create a JSON object with the expense data
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("exp_name", expense.getExpName());
+            jsonObject.put("exp_date", expense.getExpDate());
+            jsonObject.put("exp_value", expense.getExpValue());
+            jsonObject.put("exp_qty", expense.getExpQty());
+
+            // Open a connection to the server
+            URL url = new URL(urlString);
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+
+            // Set request method to POST
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setConnectTimeout(15000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("Content-Type", "application/json");
+
+            // Write the JSON data to the output stream
+            OutputStream os = connection.getOutputStream();
+            os.write(jsonObject.toString().getBytes("UTF-8"));
+            os.flush();
+            os.close();
+
+            // Get the response code
+            int responseCode = connection.getResponseCode();
+
+            // Handle the response
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                // Success - Optionally read the server response if needed
+                InputStream inputStream = connection.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    response.append(line);
+                }
+                reader.close();
+                // Process the response if necessary
+            } else {
+                // Error - Handle the failure case
+                runOnUiThread(() -> Toast.makeText(this, "Failed to save to server", Toast.LENGTH_SHORT).show());
+            }
+
+            // Close the connection
+            connection.disconnect();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            runOnUiThread(() -> Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_SHORT).show());
+        }
+    }
+
+
+
+
+    // Method to load all expenses into the RecyclerView
+    private void loadExpenses() {
+        new Thread(() -> {
+            List<Expense> expenseList = expensesDAO.getAllExpense();
+
+            runOnUiThread(() -> {
+                expenseAdapter = new ExpenseAdapter(expenseList);
+                recyclerView.setAdapter(expenseAdapter);
+            });
+        }).start();
     }
 
     // Method to show the date picker
@@ -152,12 +266,8 @@ public class ExpenseActivity extends AppCompatActivity {
         int month = calendar.get(Calendar.MONTH);
         int year = calendar.get(Calendar.YEAR);
 
-        DatePickerDialog pickerDialog = new DatePickerDialog(ExpenseActivity.this, new DatePickerDialog.OnDateSetListener() {
-            @Override
-            public void onDateSet(DatePicker datePicker, int year, int monthOfYear, int dayOfMonth) {
-                binding.edtExpDate.setText(dayOfMonth + "/" + (monthOfYear + 1) + "/" + year);
-            }
-        }, year, month, day);
+        DatePickerDialog pickerDialog = new DatePickerDialog(ExpenseActivity.this, (datePicker, year1, monthOfYear, dayOfMonth) ->
+                binding.edtExpDate.setText(dayOfMonth + "/" + (monthOfYear + 1) + "/" + year1), year, month, day);
         pickerDialog.show();
     }
 

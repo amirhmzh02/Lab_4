@@ -1,51 +1,70 @@
 package my.edu.utem.ftmk.lab4;
 
-public class Expense {
-    private String expName;
-    private String expDate;
-    private String expValue;
-    private String expQty;
+import androidx.room.Entity;
+import androidx.room.PrimaryKey;
 
-    // Constructor to initialize an Expense object
-    public Expense(String expName, String expDate, String expValue, String expQty) {
-        this.expName = expName;
-        this.expDate = expDate;
-        this.expValue = expValue;
-        this.expQty = expQty;
+@Entity(tableName = "tbl_expense")
+public class Expense {
+
+    @PrimaryKey(autoGenerate = true)
+    public int id;
+
+    public String ExpName;
+    public String ExpDate;
+    public float ExpValue;
+    public int ExpQty;
+
+    // Default constructor required by Room
+    public Expense() {
+        // No-argument constructor for Room
     }
 
-    // Getter methods to access the values
+    // Parameterized constructor
+    public Expense(String expName, String expDate, float expValue, int expQty) {
+        ExpName = expName;
+        ExpDate = expDate;
+        ExpValue = expValue;
+        ExpQty = expQty;
+    }
+
+    // Getter and Setter methods
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
     public String getExpName() {
-        return expName;
+        return ExpName;
+    }
+
+    public void setExpName(String expName) {
+        ExpName = expName;
     }
 
     public String getExpDate() {
-        return expDate;
-    }
-
-    public String getExpValue() {
-        return expValue;
-    }
-
-    public String getExpQty() {
-        return expQty;
-    }
-
-    // Setter methods to modify the values (optional if you need them)
-    public void setExpName(String expName) {
-        this.expName = expName;
+        return ExpDate;
     }
 
     public void setExpDate(String expDate) {
-        this.expDate = expDate;
+        ExpDate = expDate;
     }
 
-    public void setExpValue(String expValue) {
-        this.expValue = expValue;
+    public float getExpValue() {
+        return ExpValue;
     }
 
-    public void setExpQty(String expQty) {
-        this.expQty = expQty;
+    public void setExpValue(float expValue) {
+        ExpValue = expValue;
+    }
+
+    public int getExpQty() {
+        return ExpQty;
+    }
+
+    public void setExpQty(int expQty) {
+        ExpQty = expQty;
     }
 }
-

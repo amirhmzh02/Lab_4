@@ -10,8 +10,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 import java.util.ArrayList;
 import java.util.List;
 
-import my.edu.utem.ftmk.lab4.ExpenseActivity; // Import the Expense class from the appropriate package
-import my.edu.utem.ftmk.lab4.ExpenseAdapter;
+import my.edu.utem.ftmk.lab4.Expense;  // Use the Expense class instead of ExpenseAdapter
 
 public class DatabaseExpense extends SQLiteOpenHelper {
 
@@ -51,10 +50,7 @@ public class DatabaseExpense extends SQLiteOpenHelper {
     }
 
     // CREATE operation (Insert)
-    public int fnInsertExpense(ExpenseAdapter expense) {
-        int resCode = 0;
-
-        // Get a writable database
+    public long fnInsertExpense(Expense expense) {
         SQLiteDatabase db = this.getWritableDatabase();
 
         // Create ContentValues to hold column data
@@ -65,14 +61,13 @@ public class DatabaseExpense extends SQLiteOpenHelper {
         values.put(colExpQty, expense.getExpQty());   // Insert expense quantity
 
         // Insert the data into the database and return the result
-
-        return (int) db.insert(tblExpense,null,values); // Return the result code (row ID of the inserted record or -1 if failed)
+        return db.insert(tblExpense, null, values); // Return the row ID of the inserted record
     }
 
     // READ operation (Select all expenses)
     @SuppressLint("Range")
-    public List<ExpenseAdapter> fnGetAllExpenses() {
-        List<ExpenseAdapter> expenses = new ArrayList<>();
+    public List<Expense> fnGetAllExpenses() {
+        List<Expense> expenses = new ArrayList<>();
         SQLiteDatabase db = this.getReadableDatabase();
 
         // Query the database to get all expenses
@@ -83,11 +78,11 @@ public class DatabaseExpense extends SQLiteOpenHelper {
         if (cursor != null && cursor.moveToFirst()) {
             do {
                 // Create a new Expense object and populate it with data
-                ExpenseAdapter expense = new ExpenseAdapter(
+                Expense expense = new Expense(
                         cursor.getString(cursor.getColumnIndex(colExpName)),
                         cursor.getString(cursor.getColumnIndex(colExpDate)),
-                        cursor.getString(cursor.getColumnIndex(colExpValue)),
-                        cursor.getString(cursor.getColumnIndex(colExpQty))
+                        cursor.getFloat(cursor.getColumnIndex(colExpValue)),
+                        cursor.getInt(cursor.getColumnIndex(colExpQty))
                 );
                 expenses.add(expense);
             } while (cursor.moveToNext());
@@ -97,7 +92,7 @@ public class DatabaseExpense extends SQLiteOpenHelper {
     }
 
     // UPDATE operation (Update an existing expense)
-    public int fnUpdateExpense(ExpenseAdapter expense, int id) {
+    public int fnUpdateExpense(Expense expense, int id) {
         SQLiteDatabase db = this.getWritableDatabase();
 
         // Create ContentValues to hold column data
